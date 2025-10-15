@@ -7,7 +7,16 @@ get_metadata() {
   echo $(playerctl -p "$1" metadata --format "{{artist}} - {{title}}")
 }
 
-parsed_args=$(getopt -a -n get_mpris_media_playing -o n: -l limit: -- "$@")
+usage() {
+  echo "Usage: get_mpris_media_playing [options]
+
+  Options:
+    -h, --help:   Show the usage and exit
+    -n, --limit:  Limit the length of the output string"
+  exit 2
+}
+
+parsed_args=$(getopt -a -n get_mpris_media_playing -o hn: -l help,limit: -- "$@")
 getopt_valid_args=$?
 if [ $getopt_valid_args -ne 0 ]; then
   echo "Error: check input" >&2
@@ -20,6 +29,9 @@ unset getopt_valid_args
 
 while true; do
   case "$1" in
+    '-h'|'--help')
+      usage
+      ;;
     '-n'|'--limit')
       LIMIT=$2
       shift 2
