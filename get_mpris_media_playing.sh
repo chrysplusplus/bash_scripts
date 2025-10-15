@@ -1,8 +1,40 @@
 #!/usr/bin/env bash
 
+# script arguments
+declare -i LIMIT=-1
+
 get_metadata() {
   echo $(playerctl -p "$1" metadata --format "{{artist}} - {{title}}")
 }
+
+parsed_args=$(getopt -a -n get_mpris_media_playing -o n: -l limit: -- "$@")
+getopt_valid_args=$?
+if [ $getopt_valid_args -ne 0 ]; then
+  echo "Error: check input" >&2
+  exit 1
+fi
+
+eval set -- "$parsed_args"
+unset parsed_args
+unset getopt_valid_args
+
+while true; do
+  case "$1" in
+    '-n'|'--limit')
+      LIMIT=$2
+      shift 2
+      continue
+      ;;
+    '--')
+      shift
+      break
+      ;;
+    *)
+      echo "Unknown error" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # assuming mapfile
 mapfile -t players < <( playerctl -l ) || exit 1
@@ -27,4 +59,10 @@ if [[ ! "$metadata" ]]; then
   fi
 fi
 
-echo "${prefix}${metadata}"
+# handle limit argument
+if [[ $LIMIT -lt 0 ]]; then
+  echo "${prefix}${metadata}"
+else
+  display="${prefix}${metadata}"
+  echo ${display:0:$LIMIT}
+fi
