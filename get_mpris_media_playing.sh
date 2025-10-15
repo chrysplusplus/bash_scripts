@@ -72,9 +72,12 @@ if [[ ! "$metadata" ]]; then
 fi
 
 # handle limit argument
+display="${prefix}${metadata}"
 if [[ $LIMIT -lt 0 ]]; then
   echo "${prefix}${metadata}"
+elif [[ $LIMIT -lt ${#display} ]]; then
+  actual_limit=$(( $LIMIT - 1 ))
+  echo "${display:0:$actual_limit}…"
 else
-  display="${prefix}${metadata}"
-  echo ${display:0:$LIMIT}
+  echo $display
 fi
