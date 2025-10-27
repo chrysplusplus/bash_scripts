@@ -372,9 +372,9 @@ def thankyou() -> str:
 
     return random.choice(THANKS)
 
-def printDirectoryMetadata(directory: Path):
+def printDirectoryMetadata(directory: Path, globPattern: str):
     '''Print metadata for .mp3 files in a directory'''
-    audioPaths = directory.glob("*.mp3")
+    audioPaths = sorted(directory.glob(globPattern))
     for path in audioPaths:
         audio = EasyID3(path)
         print(f"{path}")
@@ -437,18 +437,20 @@ PROG_NAME = "Album Metadatiser"
 PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
 
 PROG_INPUT_DESC = "input data file or input directory"
-PROG_INPUT_PRINT = "print the current metadata of .mp3 files in a directory"
+PROG_PRINT = "print the current metadata of .mp3 files in a directory"
+PROG_RECURSE = "recurse through subdirectories"
 
 def main():
     # Program Arguments
     argParser = ArgumentParser(prog = "Album Metadatiser", description = PROG_DESC)
     argParser.add_argument("input", type = Path, help = PROG_INPUT_DESC)
-    argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_INPUT_PRINT)
+    argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_PRINT)
+    argParser.add_argument("-r", "--recurse", action = 'store_true', help = PROG_RECURSE)
 
     # Determine which mode to run in
     args = argParser.parse_args()
     if args.print:
-        printDirectoryMetadata(args.input)
+        printDirectoryMetadata(args.input, globPattern)
 
     elif args.input.is_dir():
         raise NotImplementedError("currently working on this")
