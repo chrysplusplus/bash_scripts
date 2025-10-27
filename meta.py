@@ -378,10 +378,16 @@ def printDirectoryMetadata(directory: Path, globPattern: str):
     for path in audioPaths:
         audio = EasyID3(path)
         print(f"{path}")
-        print(f"Title: {audio['title'][0]} (#{audio['tracknumber'][0]})")
-        print(f"Artist: {audio['artist'][0]}")
-        print(f"Album Artist: {audio['albumartist'][0]}")
-        print(f"Album: {audio['album'][0]}\n")
+        if 'title' in audio and 'tracknumber' in audio:
+            print(f"Title: {audio['title'][0]} (#{audio['tracknumber'][0]})")
+        elif 'title' in audio:
+            print(f"Title: {audio['title'][0]}")
+        if 'artist' in audio:
+            print(f"Artist: {audio['artist'][0]}")
+        if 'albumartist' in audio:
+            print(f"Album Artist: {audio['albumartist'][0]}")
+        if 'album' in audio:
+            print(f"Album: {audio['album'][0]}\n")
 
 def applyMetadataFromAlbumFileInteractively (
         albumDataPath: Path,
