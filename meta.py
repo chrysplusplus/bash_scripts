@@ -372,14 +372,22 @@ def thankyou() -> str:
 
     return random.choice(THANKS)
 
-# Program Arguments
-argParser = ArgumentParser(prog = "Album Metadatiser", description = "Put the metadata!")
-argParser.add_argument("input", type = Path)
+def printDirectoryMetadata(directory: Path):
+    '''Print metadata for .mp3 files in a directory'''
+    audioPaths = directory.glob("*.mp3")
+    for path in audioPaths:
+        audio = EasyID3(path)
+        print(f"{path}")
+        print(f"Title: {audio['title'][0]} (#{audio['tracknumber'][0]})")
+        print(f"Artist: {audio['artist'][0]}")
+        print(f"Album Artist: {audio['albumartist'][0]}")
+        print(f"Album: {audio['album'][0]}\n")
 
-def main():
-    args = argParser.parse_args()
-    albumDataPath: Path = args.input
-
+def applyMetadataFromAlbumFileInteractively (
+        albumDataPath: Path,
+        directory: Path = Path(".")):
+    '''Read metadata and tracklist from file and apply to files in directory
+    interactively'''
     album: AlbumMetadata
     try:
         data = readMetadataFile(albumDataPath)
@@ -391,7 +399,7 @@ def main():
         print("Fix error and run script again")
         return
 
-    audioPaths = Path(".").glob("*.mp3")
+    audioPaths = directory.glob("*.mp3")
 
     pathTitleMatches: list[PathTitleMatch] = []
     for path in audioPaths:
@@ -424,6 +432,29 @@ def main():
         print("No changes were made to the files")
 
     print(thankyou())
+
+PROG_NAME = "Album Metadatiser"
+PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
+
+PROG_INPUT_DESC = "input data file or input directory"
+PROG_INPUT_PRINT = "print the current metadata of .mp3 files in a directory"
+
+def main():
+    # Program Arguments
+    argParser = ArgumentParser(prog = "Album Metadatiser", description = PROG_DESC)
+    argParser.add_argument("input", type = Path, help = PROG_INPUT_DESC)
+    argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_INPUT_PRINT)
+
+    # Determine which mode to run in
+    args = argParser.parse_args()
+    if args.print:
+        printDirectoryMetadata(args.input)
+
+    elif args.input.is_dir():
+        raise NotImplementedError("currently working on this")
+
+    else:
+        applyMetadataFromAlbumFileInteractively(args.input)
 
 if __name__ == "__main__":
     main()
