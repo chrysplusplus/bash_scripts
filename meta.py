@@ -37,6 +37,26 @@ class PathTitleMatch:
         '''Object is True if title is given, else False'''
         return len(self.title) != 0
 
+class MetadataUseParentDirectoryType:
+    pass
+
+@dataclass
+class MetadataOpt:
+    value: str | MetadataUseParentDirectoryType | None
+
+    def __str__(self) -> str:
+        if self.value is None:
+            return "<not set>"
+        elif isinstance(self.value, MetadataUseParentDirectoryType):
+            return "<name of parent directory>"
+        else:
+            return self.value
+
+    def __bool__(self) -> bool:
+        return self.value is not None
+
+USE_PARENT_DIRECTORY = MetadataOpt(MetadataUseParentDirectoryType())
+
 class AlbumMetadataError(Exception):
     pass
 
@@ -48,6 +68,13 @@ class UserCancel(Exception):
 
 class UserDone(Exception):
     pass
+
+# tags that are currently implemented through options
+SUPPORTED_TAGS = (
+        'artist',
+        'albumartist',
+        'album',
+        )
 
 def removeBOM(line: str) -> str:
     ''' Remove BOM at beginning of file'''
@@ -439,12 +466,86 @@ def applyMetadataFromAlbumFileInteractively (
 
     print(thankyou())
 
+def resolveParentDirectory(path: Path) -> str:
+    '''Determine parent directory name from path parts'''
+    # parts: ... 'grandparent/', 'parent/', 'file.mp3'
+    parts = path.absolute().parts
+    assert len(parts) >= 2
+    return parts[-2]
+
+def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str|None:
+    '''Resolve option to its string value'''
+    assert opt.value is not None
+    return parent if isinstance(opt.value, MetadataUseParentDirectoryType) else opt.value
+
+def writeMetadataIfDifferent(path: Path, options: dict[str,MetadataOpt]) -> bool:
+    '''Write metadata to file if different from specified values
+
+    Return True if file was changed, otherwise False'''
+    parent = resolveParentDirectory(path)
+    metadata = {
+            tag: resolveMetadataOptWithParent(options[tag], parent)
+            for tag in SUPPORTED_TAGS
+            if options[tag]
+            }
+
+    audio = EasyID3(path)
+    doWrite = False
+    for tag, tagValue in metadata.items():
+        # tag values stored in indexed list in file
+        currentTagValue = audio[tag][0] if tag in audio else None
+        if tagValue == currentTagValue:
+            continue
+
+        audio[tag] = tagValue
+        doWrite = True
+
+    if doWrite:
+        audio.save()
+
+    return doWrite
+
+def applyMetadataToDirectory(
+        directory: Path,
+        globPattern: str,
+        options: dict[str,MetadataOpt]):
+    '''Apply metadata to .mp3 files in a directory'''
+    print("Using the following tag values:")
+
+    if options['artist']:
+        print(f"  Artist: {options['artist']}")
+    if options['albumartist']:
+        print(f"  Album Artist: {options['albumartist']}")
+    if options['album']:
+        print(f"  Album: {options['album']}")
+
+    print()
+
+    counter = 0
+    audioPaths = sorted(directory.glob(globPattern))
+    for path in audioPaths:
+        isFileChanged = writeMetadataIfDifferent(path, options)
+        if isFileChanged:
+            counter = counter + 1
+
+    print(f"{counter} files were changed")
+    print(thankyou())
+
 PROG_NAME = "Album Metadatiser"
 PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
 
 PROG_INPUT_DESC = "input data file or input directory"
 PROG_PRINT = "print the current metadata of .mp3 files in a directory"
 PROG_RECURSE = "recurse through subdirectories"
+
+PROG_ALBUM_DESC = "name of the album"
+PROG_ALBUM_PARENT_DESC = "use name of parent directory as album title"
+
+PROG_ALBUM_ARTIST_DESC = "name of the album artist"
+PROG_ALBUM_ARTIST_PARENT_DESC = "use name of parent directory as album artist"
+
+PROG_ARTIST_DESC = "name of the artist"
+PROG_ARTIST_PARENT_DESC = "use name of parent directory as artist"
 
 def main():
     # Program Arguments
@@ -453,14 +554,38 @@ def main():
     argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_PRINT)
     argParser.add_argument("-r", "--recurse", action = 'store_true', help = PROG_RECURSE)
 
+    grp_album = argParser.add_mutually_exclusive_group()
+    grp_album.add_argument("--album", help = PROG_ALBUM_DESC)
+    grp_album.add_argument(
+            "--album-from-parent", action = 'store_true', help = PROG_ALBUM_PARENT_DESC)
+
+    grp_album_artist = argParser.add_mutually_exclusive_group()
+    grp_album_artist.add_argument("--album-artist", help = PROG_ALBUM_ARTIST_DESC)
+    grp_album_artist.add_argument(
+            "--album-artist-from-parent", action = 'store_true', help = PROG_ALBUM_ARTIST_PARENT_DESC)
+
+    grp_artist = argParser.add_mutually_exclusive_group()
+    grp_artist.add_argument("--artist", help = PROG_ARTIST_DESC)
+    grp_artist.add_argument(
+            "--artist-from-parent", action = 'store_true', help = PROG_ARTIST_PARENT_DESC)
+
     # Determine which mode to run in
     args = argParser.parse_args()
+
+    globPattern = "**/*.mp3" if args.recurse else "*.mp3"
+    options = {
+            "album": USE_PARENT_DIRECTORY if args.album_from_parent else MetadataOpt(args.album),
+            "albumartist": USE_PARENT_DIRECTORY if args.album_artist_from_parent else MetadataOpt(args.album),
+            "artist": USE_PARENT_DIRECTORY if args.artist_from_parent else MetadataOpt(args.artist)
+            }
+
     if args.print:
         printDirectoryMetadata(args.input, globPattern)
 
     elif args.input.is_dir():
-        raise NotImplementedError("currently working on this")
+        applyMetadataToDirectory(args.input, globPattern, options)
 
+    # TODO implement recursion
     else:
         applyMetadataFromAlbumFileInteractively(args.input)
 
