@@ -80,14 +80,14 @@ SUPPORTED_TAGS = (
         'artist',
         'albumartist',
         'album',
-        # future plans
-        #'year',
+        'date',
         )
 
 TAG_PRINTABLE_NAMES = {
         'artist': 'Artist',
         'albumartist': 'Album Artist',
         'album': 'Album',
+        'date': 'Year',
         }
 
 def removeBOM(line: str) -> str:
@@ -148,7 +148,11 @@ def extractTagsToChange(options: dict[str, MetadataOpt]) -> dict[str, MetadataOp
     '''Extract tags that specify values to change'''
     doesSpecifyValue = lambda opt: isinstance(opt.value, str) or \
             isinstance(opt.value, MetadataUseParentDirectoryType)
-    return { tag: value for tag,value in options.items() if doesSpecifyValue(value) }
+    isTagSupported = lambda tag: tag in SUPPORTED_TAGS
+    return {
+            tag: value
+            for tag,value in options.items()
+            if doesSpecifyValue(value) and isTagSupported(tag)}
 
 def extractTagsToRemove(options: dict[str, MetadataOpt]) -> list[str]:
     '''Extract tags to remove from options'''
@@ -483,6 +487,7 @@ def thankyou() -> str:
               "Thanks for using my script!",
               "Until next time!",
               "See you soon!",
+              "(deep voice) Thank you, Pim.",
               ]
 
     return random.choice(THANKS)
@@ -492,7 +497,8 @@ DEFAULT_FORMAT_STRING = "{fullpath}:\n" \
         "\tTrack Nr:     {tracknumber}\n" \
         "\tArtist:       {artist}\n" \
         "\tAlbum Artist: {albumartist}\n" \
-        "\tAlbum:        {album}\n"
+        "\tAlbum:        {album}\n" \
+        "\tYear:         {date}\n"
 
 def printDirectoryMetadata(directory: Path, globPattern: str, formatString: str):
     '''Print metadata for .mp3 files in a directory'''
@@ -619,6 +625,9 @@ PROG_ARTIST_DESC = "name of the artist"
 PROG_ARTIST_PARENT_DESC = "use name of parent directory as artist"
 PROG_REMOVE_ARTIST_DESC = "remove artist tag"
 
+PROG_YEAR_DESC = "year of release"
+PROG_REMOVE_YEAR_DESC = "remove year tag"
+
 def main():
     # Program Arguments
     argParser = ArgumentParser(prog = "Album Metadatiser", description = PROG_DESC)
@@ -660,6 +669,12 @@ def main():
                             action = 'store_true',
                             help = PROG_REMOVE_ARTIST_DESC)
 
+    grp_year = argParser.add_mutually_exclusive_group()
+    grp_year.add_argument("-y", "--year", help = PROG_YEAR_DESC)
+    grp_year.add_argument("-Y", "--remove-year",
+                          action = 'store_true',
+                          help = PROG_REMOVE_YEAR_DESC)
+
     # Determine which mode to run in
     args = argParser.parse_args()
 
@@ -674,6 +689,7 @@ def main():
             "album":       pickOptValue(args.album, args.album_from_parent, args.remove_album),
             "albumartist": pickOptValue(args.album_artist, args.album_artist_from_parent, args.remove_album_artist),
             "artist":      pickOptValue(args.artist, args.artist_from_parent, args.remove_artist),
+            "date":        pickOptValue(args.year, False, args.remove_year),
             }
 
     if args.print:
@@ -681,6 +697,9 @@ def main():
 
     elif args.input.is_dir():
         applyMetadataToDirectory(args.input, globPattern, options)
+
+    elif not args.directory.is_dir():
+        print(f"{args.directory!s} is not a directory")
 
     else:
         applyMetadataFromAlbumFileInteractively(args.input, args.directory, globPattern, options)
