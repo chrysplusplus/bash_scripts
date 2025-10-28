@@ -565,7 +565,7 @@ def applyMetadataFromAlbumFileInteractively (
                 resolveTrackMetadataFromMatch(ptm, album),
                 resolveArtistAlbumWithAlbumartistDuplicatesArtist(album))
 
-        writeMetadata(ptm.path, metadata)
+        writeMetadataIfDifferent(ptm.path, metadata, [])
         changesWereMade = True
 
     if changesWereMade:
@@ -611,6 +611,7 @@ PROG_NAME = "Album Metadatiser"
 PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
 
 PROG_INPUT_DESC = "input data file or input directory"
+PROG_DIRECTORY_DESC = "directory to search when applying data file"
 PROG_PRINT = "print the current metadata of .mp3 files in a directory"
 PROG_RECURSE = "recurse through subdirectories"
 PROG_FORMAT_STRING_DESC = "format string for print output"
@@ -631,32 +632,42 @@ def main():
     # Program Arguments
     argParser = ArgumentParser(prog = "Album Metadatiser", description = PROG_DESC)
     argParser.add_argument("input", type = Path, help = PROG_INPUT_DESC)
-    argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_PRINT)
-    argParser.add_argument("-r", "--recurse", action = 'store_true', help = PROG_RECURSE)
-    argParser.add_argument( "-f", "--format-string",
+    argParser.add_argument("-d", "--directory",
+                           type = Path,
+                           default = Path("."),
+                           help = PROG_DIRECTORY_DESC)
+    argParser.add_argument("-f", "--format-string",
                            default = DEFAULT_FORMAT_STRING,
                            help = PROG_FORMAT_STRING_DESC)
+    argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_PRINT)
+    argParser.add_argument("-r", "--recurse", action = 'store_true', help = PROG_RECURSE)
 
     grp_album = argParser.add_mutually_exclusive_group()
     grp_album.add_argument("--album", help = PROG_ALBUM_DESC)
-    grp_album.add_argument(
-            "--album-from-parent", action = 'store_true', help = PROG_ALBUM_PARENT_DESC)
-    grp_album.add_argument(
-            "--remove-album", action = 'store_true', help = PROG_REMOVE_ALBUM_DESC)
+    grp_album.add_argument("--album-from-parent",
+                           action = 'store_true',
+                           help = PROG_ALBUM_PARENT_DESC)
+    grp_album.add_argument("--remove-album",
+                           action = 'store_true',
+                           help = PROG_REMOVE_ALBUM_DESC)
 
     grp_album_artist = argParser.add_mutually_exclusive_group()
     grp_album_artist.add_argument("--album-artist", help = PROG_ALBUM_ARTIST_DESC)
-    grp_album_artist.add_argument(
-            "--album-artist-from-parent", action = 'store_true', help = PROG_ALBUM_ARTIST_PARENT_DESC)
-    grp_album_artist.add_argument(
-            "--remove-album-artist", action = 'store_true', help = PROG_REMOVE_ALBUM_ARTIST_DESC)
+    grp_album_artist.add_argument("--album-artist-from-parent",
+                                  action = 'store_true',
+                                  help = PROG_ALBUM_ARTIST_PARENT_DESC)
+    grp_album_artist.add_argument("--remove-album-artist",
+                                  action = 'store_true',
+                                  help = PROG_REMOVE_ALBUM_ARTIST_DESC)
 
     grp_artist = argParser.add_mutually_exclusive_group()
     grp_artist.add_argument("--artist", help = PROG_ARTIST_DESC)
-    grp_artist.add_argument(
-            "--artist-from-parent", action = 'store_true', help = PROG_ARTIST_PARENT_DESC)
-    grp_artist.add_argument(
-            "--remove-artist", action = 'store_true', help = PROG_REMOVE_ARTIST_DESC)
+    grp_artist.add_argument("--artist-from-parent",
+                            action = 'store_true',
+                            help = PROG_ARTIST_PARENT_DESC)
+    grp_artist.add_argument("--remove-artist",
+                            action = 'store_true',
+                            help = PROG_REMOVE_ARTIST_DESC)
 
     # Determine which mode to run in
     args = argParser.parse_args()
@@ -681,7 +692,7 @@ def main():
         applyMetadataToDirectory(args.input, globPattern, options)
 
     else:
-        applyMetadataFromAlbumFileInteractively(args.input, globPattern = globPattern)
+        applyMetadataFromAlbumFileInteractively(args.input, args.directory, globPattern)
 
 if __name__ == "__main__":
     main()
