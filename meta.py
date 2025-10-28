@@ -597,7 +597,7 @@ def main():
     globPattern = "**/*.mp3" if args.recurse else "*.mp3"
     options = {
             "album": USE_PARENT_DIRECTORY if args.album_from_parent else MetadataOpt(args.album),
-            "albumartist": USE_PARENT_DIRECTORY if args.album_artist_from_parent else MetadataOpt(args.album),
+            "albumartist": USE_PARENT_DIRECTORY if args.album_artist_from_parent else MetadataOpt(args.album_artist),
             "artist": USE_PARENT_DIRECTORY if args.artist_from_parent else MetadataOpt(args.artist)
             }
 
