@@ -607,9 +607,8 @@ def main():
     elif args.input.is_dir():
         applyMetadataToDirectory(args.input, globPattern, options)
 
-    # TODO implement recursion
     else:
-        applyMetadataFromAlbumFileInteractively(args.input)
+        applyMetadataFromAlbumFileInteractively(args.input, globPattern = globPattern)
 
 if __name__ == "__main__":
     main()
