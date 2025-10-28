@@ -74,6 +74,8 @@ SUPPORTED_TAGS = (
         'artist',
         'albumartist',
         'album',
+        # future plans
+        #'year',
         )
 
 def removeBOM(line: str) -> str:
@@ -113,6 +115,18 @@ def readMetadataFile(path: Path) -> dict[str,list[str]]:
                 data[currentHeader].append(entry)
 
     return data
+
+def resolveParentDirectory(path: Path) -> str:
+    '''Determine parent directory name from path parts'''
+    # parts: ... 'grandparent/', 'parent/', 'file.mp3'
+    parts = path.absolute().parts
+    assert len(parts) >= 2
+    return parts[-2]
+
+def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str|None:
+    '''Resolve option to its string value'''
+    assert opt.value is not None
+    return parent if isinstance(opt.value, MetadataUseParentDirectoryType) else opt.value
 
 ARTIST_HEADER = 'artist'
 ALBUM_HEADER = 'album'
@@ -387,6 +401,26 @@ def writeMetadata(path: Path, metadata: dict[str,str]) -> None:
         audio["tracknumber"] = tracknumber
     audio.save()
 
+def writeMetadataIfDifferent(path: Path, metadata: dict[str,str]) -> bool:
+    '''Write metadata to file if different from specified values
+
+    Return True if file was changed, otherwise False'''
+    audio = EasyID3(path)
+    doWrite = False
+    for tag, tagValue in metadata.items():
+        # tag values stored in indexed list in file
+        currentTagValue = audio[tag][0] if tag in audio else None
+        if tagValue == currentTagValue:
+            continue
+
+        audio[tag] = tagValue
+        doWrite = True
+
+    if doWrite:
+        audio.save()
+
+    return doWrite
+
 def thankyou() -> str:
     '''Say thank you'''
     THANKS = ["See you next time!",
@@ -418,7 +452,8 @@ def printDirectoryMetadata(directory: Path, globPattern: str):
 
 def applyMetadataFromAlbumFileInteractively (
         albumDataPath: Path,
-        directory: Path = Path(".")):
+        directory: Path = Path("."),
+        globPattern: str = "*.mp3"):
     '''Read metadata and tracklist from file and apply to files in directory
     interactively'''
     album: AlbumMetadata
@@ -432,7 +467,7 @@ def applyMetadataFromAlbumFileInteractively (
         print("Fix error and run script again")
         return
 
-    audioPaths = directory.glob("*.mp3")
+    audioPaths = directory.glob(globPattern)
 
     pathTitleMatches: list[PathTitleMatch] = []
     for path in audioPaths:
@@ -465,45 +500,6 @@ def applyMetadataFromAlbumFileInteractively (
         print("No changes were made to the files")
 
     print(thankyou())
-
-def resolveParentDirectory(path: Path) -> str:
-    '''Determine parent directory name from path parts'''
-    # parts: ... 'grandparent/', 'parent/', 'file.mp3'
-    parts = path.absolute().parts
-    assert len(parts) >= 2
-    return parts[-2]
-
-def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str|None:
-    '''Resolve option to its string value'''
-    assert opt.value is not None
-    return parent if isinstance(opt.value, MetadataUseParentDirectoryType) else opt.value
-
-def writeMetadataIfDifferent(path: Path, options: dict[str,MetadataOpt]) -> bool:
-    '''Write metadata to file if different from specified values
-
-    Return True if file was changed, otherwise False'''
-    parent = resolveParentDirectory(path)
-    metadata = {
-            tag: resolveMetadataOptWithParent(options[tag], parent)
-            for tag in SUPPORTED_TAGS
-            if options[tag]
-            }
-
-    audio = EasyID3(path)
-    doWrite = False
-    for tag, tagValue in metadata.items():
-        # tag values stored in indexed list in file
-        currentTagValue = audio[tag][0] if tag in audio else None
-        if tagValue == currentTagValue:
-            continue
-
-        audio[tag] = tagValue
-        doWrite = True
-
-    if doWrite:
-        audio.save()
-
-    return doWrite
 
 def applyMetadataToDirectory(
         directory: Path,
