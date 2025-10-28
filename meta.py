@@ -438,6 +438,26 @@ def writeMetadataIfDifferent(path: Path, metadata: dict[str,str]) -> bool:
 
     return doWrite
 
+def readMetadata(path: Path) -> dict[str,str|None]:
+    '''Read track metadata into dictionary, missing keys are None'''
+    tags = ('title', 'tracknumber', *SUPPORTED_TAGS)
+    audio = EasyID3(path)
+    return {tag: audio[tag][0] if tag in audio else None for tag in tags}
+
+def getPrintableTags(path: Path) -> dict[str,str]:
+    '''Return a dictionary of printable metadata tags + path and fullpath'''
+    metadata = readMetadata(path)
+    stringCorrectedMetadata = {
+            tag: value if value is not None else ''
+            for tag,value in metadata.items()}
+
+    extras = {
+            'path': str(path),
+            'fullpath': str(path.absolute()),
+            }
+
+    return { **stringCorrectedMetadata, **extras }
+
 def thankyou() -> str:
     '''Say thank you'''
     THANKS = ["See you next time!",
@@ -450,22 +470,18 @@ def thankyou() -> str:
 
     return random.choice(THANKS)
 
-def printDirectoryMetadata(directory: Path, globPattern: str):
+DEFAULT_FORMAT_STRING = "{fullpath}:\n" \
+        "\tTitle:        {title}\n" \
+        "\tTrack Nr:     {tracknumber}\n" \
+        "\tArtist:       {artist}\n" \
+        "\tAlbum Artist: {albumartist}\n" \
+        "\tAlbum:        {album}\n"
+
+def printDirectoryMetadata(directory: Path, globPattern: str, formatString: str):
     '''Print metadata for .mp3 files in a directory'''
     audioPaths = sorted(directory.glob(globPattern))
     for path in audioPaths:
-        audio = EasyID3(path)
-        print(f"{path}")
-        if 'title' in audio and 'tracknumber' in audio:
-            print(f"Title: {audio['title'][0]} (#{audio['tracknumber'][0]})")
-        elif 'title' in audio:
-            print(f"Title: {audio['title'][0]}")
-        if 'artist' in audio:
-            print(f"Artist: {audio['artist'][0]}")
-        if 'albumartist' in audio:
-            print(f"Album Artist: {audio['albumartist'][0]}")
-        if 'album' in audio:
-            print(f"Album: {audio['album'][0]}\n")
+        print(formatString.format(**getPrintableTags(path)))
 
 def applyMetadataFromAlbumFileInteractively (
         albumDataPath: Path,
@@ -559,6 +575,7 @@ PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
 PROG_INPUT_DESC = "input data file or input directory"
 PROG_PRINT = "print the current metadata of .mp3 files in a directory"
 PROG_RECURSE = "recurse through subdirectories"
+PROG_FORMAT_STRING_DESC = "format string for print output"
 
 PROG_ALBUM_DESC = "name of the album"
 PROG_ALBUM_PARENT_DESC = "use name of parent directory as album title"
@@ -575,6 +592,9 @@ def main():
     argParser.add_argument("input", type = Path, help = PROG_INPUT_DESC)
     argParser.add_argument("-p", "--print", action = 'store_true', help = PROG_PRINT)
     argParser.add_argument("-r", "--recurse", action = 'store_true', help = PROG_RECURSE)
+    argParser.add_argument( "-f", "--format-string",
+                           default = DEFAULT_FORMAT_STRING,
+                           help = PROG_FORMAT_STRING_DESC)
 
     grp_album = argParser.add_mutually_exclusive_group()
     grp_album.add_argument("--album", help = PROG_ALBUM_DESC)
@@ -602,7 +622,7 @@ def main():
             }
 
     if args.print:
-        printDirectoryMetadata(args.input, globPattern)
+        printDirectoryMetadata(args.input, globPattern, args.format_string)
 
     elif args.input.is_dir():
         applyMetadataToDirectory(args.input, globPattern, options)
