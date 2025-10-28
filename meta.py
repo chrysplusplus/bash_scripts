@@ -140,6 +140,10 @@ def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str:
     assert isinstance(opt.value, str) or isinstance(opt.value, MetadataUseParentDirectoryType)
     return parent if isinstance(opt.value, MetadataUseParentDirectoryType) else opt.value
 
+def resolveOptionsWithParent(options: dict[str, MetadataOpt], parent: str) -> str:
+    '''Resolve dictionary of options to their string values'''
+    return {tag:resolveMetadataOptWithParent(value, parent) for tag,value in options.items()}
+
 def extractTagsToChange(options: dict[str, MetadataOpt]) -> dict[str, MetadataOpt]:
     '''Extract tags that specify values to change'''
     doesSpecifyValue = lambda opt: isinstance(opt.value, str) or \
@@ -362,7 +366,7 @@ PROMPT_SELECT_TRACK_CHANGE = "Enter number of any selection you want to change:"
 
 def promptTrackSelect(tracklist: list[str]) -> str|None:
     '''Prompt user to select track from tracklist'''
-    print("0 - <remove track title>")
+    print("0 - <skip this file>")
     for idx,track in enumerate(tracklist):
         print(f"{idx + 1} - {track}")
 
@@ -377,7 +381,6 @@ def promptChanges(pathTitleMatches: list[PathTitleMatch], tracklist: list[str]) 
     '''Prompt user for additional changes'''
     while True:
         try:
-            print()
             displayMatchSummary(pathTitleMatches)
             print()
             choice = promptBoundedInteger(PROMPT_SELECT_TRACK_CHANGE, bounds=(1,len(pathTitleMatches)), signal = QUIT_DONE)
@@ -389,6 +392,7 @@ def promptChanges(pathTitleMatches: list[PathTitleMatch], tracklist: list[str]) 
             ptm.title = newTitle if newTitle is not None else ''
             ptm.match = USER_DEF_MATCH
             displayPathTitleMatch(ptm)
+            print()
 
         except UserCancel:
             print("Cancelled new track selection")
@@ -411,44 +415,19 @@ def resolveTrackMetadataFromMatch(
             'tracknumber': findTracknumber(match.title, album),
             }
 
-def resolveArtistAlbumWithAlbumartistDuplicatesArtist(
-        album: AlbumMetadata) -> dict[str,str]:
-    '''Convert album metadata to metadata dictionary, assuming that the album
-    artist and the artist are the same, and omitting any tags other than artist,
-    album artist and album title'''
-    return {
-            'artist': album.artist,
-            'albumartist': album.artist,
-            'album': album.album,
-            }
+def resolveAlbumMetadata(
+        album: AlbumMetadata, options: dict[str, MetadataOpt]) -> dict[str, MetadataOpt]:
+    '''Determine options for album tags'''
+    retval = {tag: value for tag,value in options.items()}
+    if not retval['artist']:
+        retval['artist'] = MetadataOpt(album.artist)
+    if not retval['albumartist']:
+        retval['albumartist'] = MetadataOpt(album.artist)
+    if not retval['album']:
+        retval['album'] = MetadataOpt(album.album)
+    return retval
 
-def combineTrackAndAlbumMetadata(
-        track: dict[str,str], album: dict[str,str]) -> dict[str,str]:
-    '''Combine metadata dictionaries from track and album'''
-    return { **track, **album }
-
-def writeMetadata(path: Path, metadata: dict[str,str]) -> None:
-    '''Write metadata from dict to file'''
-    artist = metadata.get("artist")
-    albumartist = metadata.get("albumartist")
-    album = metadata.get("album")
-    title = metadata.get("title")
-    tracknumber = metadata.get("tracknumber")
-
-    audio = EasyID3(path)
-    if artist is not None:
-        audio["artist"] = artist
-    if albumartist is not None:
-        audio["albumartist"] = albumartist
-    if album is not None:
-        audio["album"] = album
-    if title is not None:
-        audio["title"] = title
-    if tracknumber is not None:
-        audio["tracknumber"] = tracknumber
-    audio.save()
-
-def writeMetadataIfDifferent(
+def writeMetadata(
         path: Path, metadata: dict[str,str], tagsToRemove: list[str]) -> bool:
     '''Write metadata to file if different from specified values
 
@@ -521,10 +500,11 @@ def printDirectoryMetadata(directory: Path, globPattern: str, formatString: str)
     for path in audioPaths:
         print(formatString.format(**getPrintableTags(path)))
 
-def applyMetadataFromAlbumFileInteractively (
+def applyMetadataFromAlbumFileInteractively(
         albumDataPath: Path,
-        directory: Path = Path("."),
-        globPattern: str = "*.mp3"):
+        directory: Path,
+        globPattern: str,
+        options: dict[str, MetadataOpt]):
     '''Read metadata and tracklist from file and apply to files in directory
     interactively'''
     album: AlbumMetadata
@@ -537,6 +517,11 @@ def applyMetadataFromAlbumFileInteractively (
         print(f"Error: {err!s}")
         print("Fix error and run script again")
         return
+
+    albumMetadataOptions = resolveAlbumMetadata(album, options)
+    displayChangesToBe(albumMetadataOptions)
+    tagsToRemove = extractTagsToRemove(albumMetadataOptions)
+    tagsToChange = extractTagsToChange(albumMetadataOptions)
 
     audioPaths = directory.glob(globPattern)
 
@@ -556,22 +541,26 @@ def applyMetadataFromAlbumFileInteractively (
         print("No changes were made to the files.")
         return
 
-    changesWereMade = False
+    counter = 0
     for ptm in pathTitleMatches:
         if not ptm:
             continue
 
-        metadata = combineTrackAndAlbumMetadata(
-                resolveTrackMetadataFromMatch(ptm, album),
-                resolveArtistAlbumWithAlbumartistDuplicatesArtist(album))
+        parent = resolveParentDirectory(ptm.path)
+        metadata = {
+                **resolveTrackMetadataFromMatch(ptm, album),
+                **resolveOptionsWithParent(tagsToChange, parent) }
 
-        writeMetadataIfDifferent(ptm.path, metadata, [])
-        changesWereMade = True
+        isFileChanged = writeMetadata(ptm.path, metadata, tagsToRemove)
+        if isFileChanged:
+            counter = counter + 1
 
-    if changesWereMade:
-        print("Changes saved to files!")
-    else:
+    if counter == 0:
         print("No changes were made to the files")
+    elif counter == 1:
+        print("1 file was changed")
+    else:
+        print(f"{counter} files were changed")
 
     print(thankyou())
 
@@ -596,12 +585,14 @@ def applyMetadataToDirectory(
                 tag: resolveMetadataOptWithParent(value, parent)
                 for tag,value in tagsToChange.items()}
 
-        isFileChanged = writeMetadataIfDifferent(path, metadata, tagsToRemove)
+        isFileChanged = writeMetadata(path, metadata, tagsToRemove)
         if isFileChanged:
             counter = counter + 1
 
     if counter == 0:
         print("No files were changed")
+    elif counter == 1:
+        print("1 file was changed")
     else:
         print(f"{counter} files were changed")
 
@@ -692,7 +683,7 @@ def main():
         applyMetadataToDirectory(args.input, globPattern, options)
 
     else:
-        applyMetadataFromAlbumFileInteractively(args.input, args.directory, globPattern)
+        applyMetadataFromAlbumFileInteractively(args.input, args.directory, globPattern, options)
 
 if __name__ == "__main__":
     main()
