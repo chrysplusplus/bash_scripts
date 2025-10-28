@@ -40,15 +40,20 @@ class PathTitleMatch:
 class MetadataUseParentDirectoryType:
     pass
 
+class MetadataRemoveTagType:
+    pass
+
 @dataclass
 class MetadataOpt:
-    value: str | MetadataUseParentDirectoryType | None
+    value: str | MetadataUseParentDirectoryType | MetadataRemoveTagType | None
 
     def __str__(self) -> str:
         if self.value is None:
             return "<not set>"
         elif isinstance(self.value, MetadataUseParentDirectoryType):
             return "<name of parent directory>"
+        elif isinstance(self.value, MetadataRemoveTagType):
+            return "<remove tag>"
         else:
             return self.value
 
@@ -56,6 +61,7 @@ class MetadataOpt:
         return self.value is not None
 
 USE_PARENT_DIRECTORY = MetadataOpt(MetadataUseParentDirectoryType())
+REMOVE_TAG = MetadataOpt(MetadataRemoveTagType())
 
 class AlbumMetadataError(Exception):
     pass
@@ -77,6 +83,12 @@ SUPPORTED_TAGS = (
         # future plans
         #'year',
         )
+
+TAG_PRINTABLE_NAMES = {
+        'artist': 'Artist',
+        'albumartist': 'Album Artist',
+        'album': 'Album',
+        }
 
 def removeBOM(line: str) -> str:
     ''' Remove BOM at beginning of file'''
@@ -123,10 +135,20 @@ def resolveParentDirectory(path: Path) -> str:
     assert len(parts) >= 2
     return parts[-2]
 
-def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str|None:
+def resolveMetadataOptWithParent(opt: MetadataOpt, parent: str) -> str:
     '''Resolve option to its string value'''
-    assert opt.value is not None
+    assert isinstance(opt.value, str) or isinstance(opt.value, MetadataUseParentDirectoryType)
     return parent if isinstance(opt.value, MetadataUseParentDirectoryType) else opt.value
+
+def extractTagsToChange(options: dict[str, MetadataOpt]) -> dict[str, MetadataOpt]:
+    '''Extract tags that specify values to change'''
+    doesSpecifyValue = lambda opt: isinstance(opt.value, str) or \
+            isinstance(opt.value, MetadataUseParentDirectoryType)
+    return { tag: value for tag,value in options.items() if doesSpecifyValue(value) }
+
+def extractTagsToRemove(options: dict[str, MetadataOpt]) -> list[str]:
+    '''Extract tags to remove from options'''
+    return [tag for tag in options.keys() if isinstance(options[tag].value, MetadataRemoveTagType)]
 
 ARTIST_HEADER = 'artist'
 ALBUM_HEADER = 'album'
@@ -266,6 +288,14 @@ def displayMatchSummary(pathTitleMatches: list[PathTitleMatch]) -> None:
     for idx,change in enumerate(pathTitleMatches):
         print(f"{idx + 1} - ", end = '')
         displayPathTitleMatch(change)
+
+def displayChangesToBe(options: dict[str,MetadataOpt]) -> None:
+    '''Display changes to be made to the discovered files'''
+    print("Using the following tag values:")
+    for tag in SUPPORTED_TAGS:
+        if options[tag]:
+            print(f"  {TAG_PRINTABLE_NAMES[tag]}: {options[tag]}")
+    print()
 
 # signals
 QUIT = 'q'
@@ -418,7 +448,8 @@ def writeMetadata(path: Path, metadata: dict[str,str]) -> None:
         audio["tracknumber"] = tracknumber
     audio.save()
 
-def writeMetadataIfDifferent(path: Path, metadata: dict[str,str]) -> bool:
+def writeMetadataIfDifferent(
+        path: Path, metadata: dict[str,str], tagsToRemove: list[str]) -> bool:
     '''Write metadata to file if different from specified values
 
     Return True if file was changed, otherwise False'''
@@ -431,6 +462,13 @@ def writeMetadataIfDifferent(path: Path, metadata: dict[str,str]) -> bool:
             continue
 
         audio[tag] = tagValue
+        doWrite = True
+
+    for tag in tagsToRemove:
+        if tag not in audio:
+            continue
+
+        del audio[tag]
         doWrite = True
 
     if doWrite:
@@ -542,31 +580,31 @@ def applyMetadataToDirectory(
         globPattern: str,
         options: dict[str,MetadataOpt]):
     '''Apply metadata to .mp3 files in a directory'''
-    print("Using the following tag values:")
+    if not any(options.values()):
+        print("Nothing to do")
+        return
 
-    if options['artist']:
-        print(f"  Artist: {options['artist']}")
-    if options['albumartist']:
-        print(f"  Album Artist: {options['albumartist']}")
-    if options['album']:
-        print(f"  Album: {options['album']}")
-
-    print()
+    displayChangesToBe(options)
+    tagsToRemove = extractTagsToRemove(options)
+    tagsToChange = extractTagsToChange(options)
 
     counter = 0
     audioPaths = sorted(directory.glob(globPattern))
     for path in audioPaths:
         parent = resolveParentDirectory(path)
         metadata = {
-                tag: resolveMetadataOptWithParent(options[tag], parent)
-                for tag in SUPPORTED_TAGS
-                if options[tag]}
+                tag: resolveMetadataOptWithParent(value, parent)
+                for tag,value in tagsToChange.items()}
 
-        isFileChanged = writeMetadataIfDifferent(path, metadata)
+        isFileChanged = writeMetadataIfDifferent(path, metadata, tagsToRemove)
         if isFileChanged:
             counter = counter + 1
 
-    print(f"{counter} files were changed")
+    if counter == 0:
+        print("No files were changed")
+    else:
+        print(f"{counter} files were changed")
+
     print(thankyou())
 
 PROG_NAME = "Album Metadatiser"
@@ -579,12 +617,15 @@ PROG_FORMAT_STRING_DESC = "format string for print output"
 
 PROG_ALBUM_DESC = "name of the album"
 PROG_ALBUM_PARENT_DESC = "use name of parent directory as album title"
+PROG_REMOVE_ALBUM_DESC = "remove album tag"
 
 PROG_ALBUM_ARTIST_DESC = "name of the album artist"
 PROG_ALBUM_ARTIST_PARENT_DESC = "use name of parent directory as album artist"
+PROG_REMOVE_ALBUM_ARTIST_DESC = "remove album artist tag"
 
 PROG_ARTIST_DESC = "name of the artist"
 PROG_ARTIST_PARENT_DESC = "use name of parent directory as artist"
+PROG_REMOVE_ARTIST_DESC = "remove artist tag"
 
 def main():
     # Program Arguments
@@ -600,25 +641,37 @@ def main():
     grp_album.add_argument("--album", help = PROG_ALBUM_DESC)
     grp_album.add_argument(
             "--album-from-parent", action = 'store_true', help = PROG_ALBUM_PARENT_DESC)
+    grp_album.add_argument(
+            "--remove-album", action = 'store_true', help = PROG_REMOVE_ALBUM_DESC)
 
     grp_album_artist = argParser.add_mutually_exclusive_group()
     grp_album_artist.add_argument("--album-artist", help = PROG_ALBUM_ARTIST_DESC)
     grp_album_artist.add_argument(
             "--album-artist-from-parent", action = 'store_true', help = PROG_ALBUM_ARTIST_PARENT_DESC)
+    grp_album_artist.add_argument(
+            "--remove-album-artist", action = 'store_true', help = PROG_REMOVE_ALBUM_ARTIST_DESC)
 
     grp_artist = argParser.add_mutually_exclusive_group()
     grp_artist.add_argument("--artist", help = PROG_ARTIST_DESC)
     grp_artist.add_argument(
             "--artist-from-parent", action = 'store_true', help = PROG_ARTIST_PARENT_DESC)
+    grp_artist.add_argument(
+            "--remove-artist", action = 'store_true', help = PROG_REMOVE_ARTIST_DESC)
 
     # Determine which mode to run in
     args = argParser.parse_args()
 
     globPattern = "**/*.mp3" if args.recurse else "*.mp3"
+
+    pickOptValue = lambda value, doUseParent, doRemoveTag: \
+            USE_PARENT_DIRECTORY if doUseParent else \
+            REMOVE_TAG if doRemoveTag else \
+            MetadataOpt(value)
+
     options = {
-            "album": USE_PARENT_DIRECTORY if args.album_from_parent else MetadataOpt(args.album),
-            "albumartist": USE_PARENT_DIRECTORY if args.album_artist_from_parent else MetadataOpt(args.album_artist),
-            "artist": USE_PARENT_DIRECTORY if args.artist_from_parent else MetadataOpt(args.artist)
+            "album":       pickOptValue(args.album, args.album_from_parent, args.remove_album),
+            "albumartist": pickOptValue(args.album_artist, args.album_artist_from_parent, args.remove_album_artist),
+            "artist":      pickOptValue(args.artist, args.artist_from_parent, args.remove_artist),
             }
 
     if args.print:
