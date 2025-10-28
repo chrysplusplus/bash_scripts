@@ -510,9 +510,11 @@ def applyMetadataFromAlbumFileInteractively(
         albumDataPath: Path,
         directory: Path,
         globPattern: str,
-        options: dict[str, MetadataOpt]):
+        options: dict[str, MetadataOpt]) -> bool:
     '''Read metadata and tracklist from file and apply to files in directory
-    interactively'''
+    interactively
+
+    Return success state'''
     album: AlbumMetadata
     try:
         data = readMetadataFile(albumDataPath)
@@ -522,7 +524,13 @@ def applyMetadataFromAlbumFileInteractively(
     except AlbumMetadataError as err:
         print(f"Error: {err!s}")
         print("Fix error and run script again")
-        return
+        return False
+
+    except UnicodeDecodeError:
+        print(f"Could not decode {albumDataPath!s}")
+        print("This file might be a binary file or encoded in a way that is " \
+                "not compatible with UTF-8")
+        return False
 
     albumMetadataOptions = resolveAlbumMetadata(album, options)
     displayChangesToBe(albumMetadataOptions)
@@ -545,7 +553,7 @@ def applyMetadataFromAlbumFileInteractively(
     except UserQuit:
         print("Quitting...")
         print("No changes were made to the files.")
-        return
+        return False
 
     counter = 0
     for ptm in pathTitleMatches:
@@ -569,6 +577,7 @@ def applyMetadataFromAlbumFileInteractively(
         print(f"{counter} files were changed")
 
     print(thankyou())
+    return True
 
 def applyMetadataToDirectory(
         directory: Path,
@@ -609,6 +618,7 @@ PROG_DESC = "Apply metadata to multiple .mp3 files from a single source."
 
 PROG_INPUT_DESC = "input data file or input directory"
 PROG_DIRECTORY_DESC = "directory to search when applying data file"
+PROG_DELETE_DATA_FILE_DESC = "delete data file when finished"
 PROG_PRINT = "print the current metadata of .mp3 files in a directory"
 PROG_RECURSE = "recurse through subdirectories"
 PROG_FORMAT_STRING_DESC = "format string for print output"
@@ -636,6 +646,9 @@ def main():
                            type = Path,
                            default = Path("."),
                            help = PROG_DIRECTORY_DESC)
+    argParser.add_argument("-D", "--delete-data-file",
+                           action = 'store_true',
+                           help = PROG_DELETE_DATA_FILE_DESC)
     argParser.add_argument("-f", "--format-string",
                            default = DEFAULT_FORMAT_STRING,
                            help = PROG_FORMAT_STRING_DESC)
@@ -698,11 +711,22 @@ def main():
     elif args.input.is_dir():
         applyMetadataToDirectory(args.input, globPattern, options)
 
+    elif args.input.suffix == ".mp3" and not args.input.exists():
+        print(f"{args.input!s} does not exist")
+
+    elif args.input.suffix == ".mp3":
+        print("Reading tags from .mp3 file:")
+        print(args.format_string.format(**getPrintableTags(args.input)))
+
     elif not args.directory.is_dir():
         print(f"{args.directory!s} is not a directory")
 
     else:
-        applyMetadataFromAlbumFileInteractively(args.input, args.directory, globPattern, options)
+        success = applyMetadataFromAlbumFileInteractively(
+                args.input, args.directory, globPattern, options)
+        if success and args.delete_data_file:
+            print("Deleting data file...")
+            args.input.unlink()
 
 if __name__ == "__main__":
     main()
