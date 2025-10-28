@@ -367,18 +367,35 @@ def promptChanges(pathTitleMatches: list[PathTitleMatch], tracklist: list[str]) 
         except UserDone:
             return pathTitleMatches
 
-def trackMetadata(pathMatch: PathTitleMatch, album: AlbumMetadata) -> dict[str,str]:
-    '''Determine metadata for a track'''
-    if not pathMatch:
-        return {}
+def findTracknumber(title: str, album: AlbumMetadata) -> str:
+    '''Determine tracknumber from title'''
+    assert title in album.tracklist
+    return str(album.tracklist.index(title) + 1)
 
+def resolveTrackMetadataFromMatch(
+        match: PathTitleMatch, album: AlbumMetadata) -> dict[str,str]:
+    '''Determine track metadata tag value from a definite title match'''
+    assert match
     return {
-            "artist" : album.artist,
-            "albumartist" : album.artist,
-            "album" : album.album,
-            "title" : pathMatch.title,
-            "tracknumber" : str(album.tracklist.index(pathMatch.title) + 1),
+            'title': match.title,
+            'tracknumber': findTracknumber(match.title, album),
             }
+
+def resolveArtistAlbumWithAlbumartistDuplicatesArtist(
+        album: AlbumMetadata) -> dict[str,str]:
+    '''Convert album metadata to metadata dictionary, assuming that the album
+    artist and the artist are the same, and omitting any tags other than artist,
+    album artist and album title'''
+    return {
+            'artist': album.artist,
+            'albumartist': album.artist,
+            'album': album.album,
+            }
+
+def combineTrackAndAlbumMetadata(
+        track: dict[str,str], album: dict[str,str]) -> dict[str,str]:
+    '''Combine metadata dictionaries from track and album'''
+    return { **track, **album }
 
 def writeMetadata(path: Path, metadata: dict[str,str]) -> None:
     '''Write metadata from dict to file'''
@@ -490,7 +507,10 @@ def applyMetadataFromAlbumFileInteractively (
         if not ptm:
             continue
 
-        metadata = trackMetadata(ptm, album)
+        metadata = combineTrackAndAlbumMetadata(
+                resolveTrackMetadataFromMatch(ptm, album),
+                resolveArtistAlbumWithAlbumartistDuplicatesArtist(album))
+
         writeMetadata(ptm.path, metadata)
         changesWereMade = True
 
@@ -520,7 +540,13 @@ def applyMetadataToDirectory(
     counter = 0
     audioPaths = sorted(directory.glob(globPattern))
     for path in audioPaths:
-        isFileChanged = writeMetadataIfDifferent(path, options)
+        parent = resolveParentDirectory(path)
+        metadata = {
+                tag: resolveMetadataOptWithParent(options[tag], parent)
+                for tag in SUPPORTED_TAGS
+                if options[tag]}
+
+        isFileChanged = writeMetadataIfDifferent(path, metadata)
         if isFileChanged:
             counter = counter + 1
 
