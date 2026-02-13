@@ -28,6 +28,7 @@ toc_links=0
 do_open=1
 do_strip_toc=0
 pdf_path=""
+do_test=0
 
 # parse options
 while (( $# > 0 )); do
@@ -97,18 +98,18 @@ if [[ ! -e "$filepath" ]]; then
   exit 1
 fi
 
-TMP_DIR="${TMP_DIR:-/tmp/html/}"
+tmp_dir="${TMP_DIR:-/tmp/html/}"
 
-if [[ ! -e "$TMP_DIR" ]]; then
-  mkdir "$TMP_DIR"
+if [[ ! -e "$tmp_dir" ]]; then
+  mkdir "$tmp_dir"
   if [[ ! $? ]]; then
-    printf "%s\n" "Could not create directory: $TMP_DIR" >&2
+    printf "%s\n" "Could not create directory: $tmp_dir" >&2
     exit 3
   fi
 fi
 
-if [[ ! -d "$TMP_DIR" ]]; then
-  printf "%s\n" "Expected directory: $TMP_DIR" >&2
+if [[ ! -d "$tmp_dir" ]]; then
+  printf "%s\n" "Expected directory: $tmp_dir" >&2
   exit 1
 fi
 
