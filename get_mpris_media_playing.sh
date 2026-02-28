@@ -3,10 +3,12 @@
 # TODO this script needs a bit of love, removing the getopts and just updating
 # some of the coding techniques
 
+# quiet mode is when the script only outputs that something is playing or
+# paused, not what the media is called, which may be distracting
+quiet_mode=0
 quiet_flag_file="$HOME/.quiet_media"
 if [[ -e "$quiet_flag_file" ]]; then
-  echo "🔇"
-  exit
+  quiet_mode=1
 fi
 
 # script arguments
@@ -63,10 +65,11 @@ mapfile -t statuses < <( playerctl -a status ) || exit 1
 
 # players that are currently "Playing" take priority
 for index in "${!statuses[@]}"; do
-  if [ "${statuses[$index]}" == "Playing" ]; then
+  if [[ "${statuses[$index]}" == "Playing" ]]; then
     player="${players[$index]}"
     metadata=$(get_metadata "$player")
     prefix=""
+    quiet_text="Media playing"
     break
   fi
 done
@@ -77,11 +80,17 @@ if [[ ! "$metadata" ]]; then
     player="${players[0]}"
     metadata=$(get_metadata "$player")
     prefix="(Paused) "
+    quiet_text="Media paused"
   fi
 fi
 
+if (( "$quiet_mode" )); then
+  display="$quiet_text"
+else
+  display="${prefix}${metadata}"
+fi
+
 # handle limit argument
-display="${prefix}${metadata}"
 if [[ $LIMIT -lt 0 ]]; then
   echo "${prefix}${metadata}"
 elif [[ $LIMIT -lt ${#display} ]]; then
