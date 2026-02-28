@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# TODO this script needs a bit of love, removing the getopts and just updating
+# some of the coding techniques
+
+quiet_flag_file="$HOME/.quiet_media"
+if [[ -e "$quiet_flag_file" ]]; then
+  echo "🔇"
+  exit
+fi
+
 # script arguments
 declare -i LIMIT=-1
 
