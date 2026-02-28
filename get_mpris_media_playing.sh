@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# TODO this script needs a bit of love, removing the getopts and just updating
-# some of the coding techniques
-
 # quiet mode is when the script only outputs that something is playing or
 # paused, not what the media is called, which may be distracting
 quiet_mode=0
@@ -12,7 +9,7 @@ if [[ -e "$quiet_flag_file" ]]; then
 fi
 
 # script arguments
-declare -i LIMIT=-1
+limit=-1
 
 get_metadata() {
   echo $(playerctl -p "$1" metadata --format "{{artist}} - {{title}}")
@@ -24,27 +21,17 @@ usage() {
   Options:
     -h, --help:   Show the usage and exit
     -n, --limit:  Limit the length of the output string"
-  exit 2
 }
 
-parsed_args=$(getopt -a -n get_mpris_media_playing -o hn: -l help,limit: -- "$@")
-getopt_valid_args=$?
-if [ $getopt_valid_args -ne 0 ]; then
-  echo "Error: check input" >&2
-  exit 1
-fi
-
-eval set -- "$parsed_args"
-unset parsed_args
-unset getopt_valid_args
-
-while true; do
+# parse options
+while (( $# > 0 )); do
   case "$1" in
-    '-h'|'--help')
+    -h|--help)
       usage
+      exit 2
       ;;
-    '-n'|'--limit')
-      LIMIT=$2
+    -n|--limit)
+      limit=$2
       shift 2
       continue
       ;;
@@ -53,8 +40,9 @@ while true; do
       break
       ;;
     *)
-      echo "Unknown error" >&2
-      exit 1
+      printf "%s\n" "Unknown option: $1" >2
+      usage
+      exit 2
       ;;
   esac
 done
@@ -91,10 +79,10 @@ else
 fi
 
 # handle limit argument
-if [[ $LIMIT -lt 0 ]]; then
+if [[ $limit -lt 0 ]]; then
   echo "${prefix}${metadata}"
-elif [[ $LIMIT -lt ${#display} ]]; then
-  actual_limit=$(( $LIMIT - 1 ))
+elif [[ $limit -lt ${#display} ]]; then
+  actual_limit=$(( $limit - 1 ))
   echo "${display:0:$actual_limit}…"
 else
   echo $display
