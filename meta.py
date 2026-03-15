@@ -601,6 +601,8 @@ def applyMetadataToDirectory(
 
     counter = 0
     audioPaths = sorted(directory.glob(globPattern))
+    print("Found {len(audioPaths)} files to inspect")
+    print("Processing", end = '')
     for path in audioPaths:
         parent = resolveParentDirectory(path)
         metadata = {
@@ -608,6 +610,7 @@ def applyMetadataToDirectory(
                 for tag,value in tagsToChange.items()}
 
         isFileChanged = writeMetadata(path, metadata, tagsToRemove)
+        print(".", end = '')
         if isFileChanged:
             counter = counter + 1
 
