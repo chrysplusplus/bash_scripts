@@ -495,6 +495,8 @@ def thankyou() -> str:
               "(deep voice) Thank you, Vim.",
               "Cheers, you slag!",
               "Bonne anniversaire",
+              "Danke scone",
+              "Do you belIEVE IN LIFE AFTER LOOOVE",
               ]
 
     return random.choice(THANKS)
