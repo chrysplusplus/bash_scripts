@@ -136,6 +136,7 @@ if (( $toc_links )) && grep -q -E '^# Contents' "$filepath"; then
 fi
 
 if [[ -n "$pdf_path" ]]; then
+  #grep -v -E '^:' "$filepath" | pandoc -t pdf -V geometry:margin=2cm -V papersize=a5 -o "$pdf_path"
   grep -v -E '^:' "$filepath" | pandoc -o "$pdf_path"
   tmp_path="$pdf_path"
 else
