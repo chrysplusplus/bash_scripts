@@ -17,6 +17,7 @@ Options:
     -r, --refresh   Render file but don't open; useful for updating the preview page without opening it in a new tab
     --no-toc        Omit the table of contents; errors if --toc-links is specified
     --pdf pdf_file  Render markdown to PDF instead of HTML
+    --booky         Render PDF with better styling; requires --pdf
 "
 }
 
@@ -29,6 +30,7 @@ do_open=1
 do_strip_toc=0
 pdf_path=""
 do_test=0
+booky_pdf=0
 
 # parse options
 while (( $# > 0 )); do
@@ -61,6 +63,10 @@ while (( $# > 0 )); do
           shift 2
           ;;
       esac
+      ;;
+    --booky)
+      booky=1
+      shift
       ;;
     --)
       shift
@@ -135,8 +141,10 @@ if (( $toc_links )) && grep -q -E '^# Contents' "$filepath"; then
     [top](#contents)' "$old_filepath" > "$filepath"
 fi
 
-if [[ -n "$pdf_path" ]]; then
-  #grep -v -E '^:' "$filepath" | pandoc -t pdf -V geometry:margin=2cm -V papersize=a5 -o "$pdf_path"
+if (( $booky )) && [[ -n "$pdf_path" ]]; then
+  grep -v -E '^:' "$filepath" | pandoc -t pdf -V geometry:margin=2cm -V papersize=a5 -o "$pdf_path"
+  tmp_path="$pdf_path"
+elif [[ -n "$pdf_path" ]]; then
   grep -v -E '^:' "$filepath" | pandoc -o "$pdf_path"
   tmp_path="$pdf_path"
 else
